@@ -5,7 +5,7 @@ import (
 	"encoding/xml"
 	"fmt"
 	"github.com/pkg/errors"
-	"golang.org/x/text/encoding/charmap"
+	"golang.org/x/text/encoding/ianaindex"
 	"io"
 )
 
@@ -98,13 +98,16 @@ func UnmarshalPOM(data []byte) (*POM, error) {
 	var pom POM
 	decoder := xml.NewDecoder(bytes.NewBuffer(data))
 	decoder.CharsetReader = func(charset string, reader io.Reader) (io.Reader, error) {
-		if charset == "ISO-8859-1" {
-			return charmap.ISO8859_1.NewDecoder().Reader(reader), nil
+		enc, err := ianaindex.IANA.Encoding(charset)
+		if err != nil {
+			return nil, fmt.Errorf("charset %s: %s", charset, err.Error())
 		}
-		if charset == "Windows-1252" {
-			return charmap.Windows1252.NewDecoder().Reader(reader), nil
+		if enc == nil {
+			// Assume it's compatible with (a subset of) UTF-8 encoding
+			// Bug: https://github.com/golang/go/issues/19421
+			return reader, nil
 		}
-		return nil, fmt.Errorf("unmarshal: unsupported charset: %s", charset)
+		return enc.NewDecoder().Reader(reader), nil
 	}
 
 	if err := decoder.Decode(&pom); err != nil {
